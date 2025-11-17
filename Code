@@ -1,0 +1,447 @@
+# -------------------------------------------------------------
+# 📌 WALMART SALES FORECASTING APP (Streamlit + Prophet)
+# -------------------------------------------------------------
+# This app allows users to upload a CSV file with Date & Weekly Sales,
+# visualize the data, build a forecasting model using Prophet,
+# generate future predictions, visualize forecast components,
+# perform cross-validation, and download results.
+# -------------------------------------------------------------
+
+import streamlit as st
+import pandas as pd
+from prophet import Prophet
+from prophet.plot import plot_plotly, plot_components_plotly
+from prophet.diagnostics import cross_validation, performance_metrics
+import plotly.express as px
+
+# -------------------------------------------------------------
+# STREAMLIT PAGE SETTINGS
+# -------------------------------------------------------------
+st.set_page_config(
+    page_title="Sales Forecasting App",
+    layout="wide"
+)
+
+st.title("📈 Walmart Sales Forecasting using Facebook Prophet")
+
+# -------------------------------------------------------------
+# ------------------------- SIDEBAR ----------------------------
+# -------------------------------------------------------------
+st.sidebar.header("⚙️ Settings")
+
+# 1. Upload CSV File
+uploaded_file = st.sidebar.file_uploader(
+    "Upload your sales CSV file",
+    type=["csv"]
+)
+
+# 2. Select forecast frequency
+freq_option = st.sidebar.selectbox(
+    "Select Forecast Frequency",
+    ["Days", "Weeks", "Months"]
+)
+
+# 3. Select number of periods to forecast
+periods_input = st.sidebar.number_input(
+    f"How many {freq_option.lower()} to forecast?",
+    min_value=4, max_value=365, value=12, step=1
+)
+
+# Map user-friendly names to Prophet frequency codes
+freq_map = {
+    "Days": "D",
+    "Weeks": "W",
+    "Months": "M"
+}
+freq = freq_map[freq_option]
+
+# -------------------------------------------------------------
+# ------------------------ MAIN PAGE ---------------------------
+# -------------------------------------------------------------
+if uploaded_file is not None:
+
+    # ---------------------------------------------------------
+    # STEP 1: Load the dataset
+    # ---------------------------------------------------------
+    df = pd.read_csv(uploaded_file)
+
+    st.subheader("📂 Raw Uploaded Data")
+    st.write(df.head())
+
+    # ---------------------------------------------------------
+    # STEP 2: Prepare data for Prophet
+    # Prophet requires columns named 'ds' (date) and 'y' (value)
+    # ---------------------------------------------------------
+    df_prophet = df[['Date', 'Weekly_Sales']] \
+        .rename(columns={'Date': 'ds', 'Weekly_Sales': 'y'})
+
+    # Convert date format (handles DD-MM-YYYY)
+    df_prophet['ds'] = pd.to_datetime(df_prophet['ds'], dayfirst=True)
+
+    # ---------------------------------------------------------
+    # STEP 3: Plot the uploaded time-series data
+    # ---------------------------------------------------------
+    st.subheader("📊 Time Series Plot (Uploaded Data)")
+    st.line_chart(df_prophet.set_index('ds')['y'])
+
+    # ---------------------------------------------------------
+    # STEP 4: Train Prophet model
+    # ---------------------------------------------------------
+    model = Prophet()
+    model.fit(df_prophet)
+
+    # ---------------------------------------------------------
+    # STEP 5: Create future dates and generate predictions
+    # ---------------------------------------------------------
+    future = model.make_future_dataframe(periods=periods_input, freq=freq)
+    forecast = model.predict(future)
+
+    st.subheader("🔮 Forecasted Values")
+    st.write(
+        forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail()
+    )
+
+    # ---------------------------------------------------------
+    # STEP 6: Plot the forecast
+    # ---------------------------------------------------------
+    st.subheader("📈 Forecast Plot")
+    fig1 = plot_plotly(model, forecast)
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # STEP 7: Plot forecast components (Trend, Weekly, Yearly, etc.)
+    # ---------------------------------------------------------
+    st.subheader("📊 Forecast Components")
+    fig2 = plot_components_plotly(model, forecast)
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # STEP 8: Cross-Validation (Model Performance Check)
+    # ---------------------------------------------------------
+    st.subheader("📉 Model Performance (Cross-Validation)")
+
+    try:
+        # initial = amount of data used before testing begins
+        # period = spacing between cutoff points
+        # horizon = how far into the future to predict at each cutoff
+        df_cv = cross_validation(
+            model,
+            initial="365 days",
+            period="180 days",
+            horizon="60 days"
+        )
+
+        # Generate performance metrics (MAPE, RMSE, etc.)
+        df_perf = performance_metrics(df_cv)
+
+        st.write(df_perf.head())
+
+        # Plot MAPE over prediction horizon
+        fig3 = px.line(
+            df_perf,
+            x='horizon',
+            y='mape',
+            title="MAPE over Forecast Horizon"
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+    except Exception as e:
+        st.warning(f"Cross-validation skipped due to error: {e}")
+
+    # ---------------------------------------------------------
+    # STEP 9: Provide downloadable forecast file
+    # ---------------------------------------------------------
+    st.subheader("📥 Download Forecast Results")
+
+    csv = forecast.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download Forecast as CSV",
+        data=csv,
+        file_name="forecast_results.csv",
+        mime="text/csv"
+    )
+
+# -------------------------------------------------------------
+# If no file uploaded
+# -------------------------------------------------------------
+else:
+    st.info("Please upload a CSV file with `Date` and `Weekly_Sales` columns to continue.")
+
+
+
+# -------------------------------------------------------------
+# 📌 SALES FORECASTING STREAMLIT APP USING FACEBOOK PROPHET
+# -------------------------------------------------------------
+# This app:
+# 1️⃣ Uploads a CSV file containing Date & Weekly Sales  
+# 2️⃣ Visualizes the time series  
+# 3️⃣ Trains a Prophet forecasting model  
+# 4️⃣ Predicts future dates (Daily/Weekly/Monthly)  
+# 5️⃣ Shows forecast plots and trend components  
+# 6️⃣ Runs cross-validation for model accuracy  
+# 7️⃣ Allows downloading forecast results  
+# -------------------------------------------------------------
+
+import streamlit as st
+import pandas as pd
+from prophet import Prophet
+from prophet.plot import plot_plotly, plot_components_plotly
+from prophet.diagnostics import cross_validation, performance_metrics
+import plotly.express as px
+
+# -------------------------------------------------------------
+# Streamlit Page Configuration
+# -------------------------------------------------------------
+st.set_page_config(page_title="Sales Forecasting App", layout="wide")
+
+st.title("📈 Walmart Sales Forecasting using Facebook Prophet")
+
+# -------------------------------------------------------------
+# -------------------------- SIDEBAR ---------------------------
+# -------------------------------------------------------------
+st.sidebar.header("⚙️ Settings")
+
+# 🔹 Upload CSV file containing Date & Weekly_Sales
+uploaded_file = st.sidebar.file_uploader(
+    "Upload your sales CSV file",
+    type=["csv"]
+)
+
+# 🔹 Choose forecasting frequency (D / W / M)
+freq_option = st.sidebar.selectbox(
+    "Select Forecast Frequency",
+    ["Days", "Weeks", "Months"]
+)
+
+# 🔹 Number of future periods to predict
+periods_input = st.sidebar.number_input(
+    f"How many {freq_option.lower()} to forecast?",
+    min_value=4,
+    max_value=365,
+    value=12,
+    step=1
+)
+
+# Mapping readable frequency to Prophet frequency notation
+freq_map = {"Days": "D", "Weeks": "W", "Months": "M"}
+freq = freq_map[freq_option]
+
+# -------------------------------------------------------------
+# ------------------------- MAIN AREA --------------------------
+# -------------------------------------------------------------
+if uploaded_file is not None:
+
+    # ---------------------------------------------------------
+    # STEP 1: Load and Display the Raw CSV Data
+    # ---------------------------------------------------------
+    df = pd.read_csv(uploaded_file)
+
+    st.subheader("📂 Raw Data Preview")
+    st.write(df.head())
+
+    # ---------------------------------------------------------
+    # STEP 2: Prepare Data for Prophet
+    # Prophet requires:
+    #   'ds' column -> Date
+    #   'y' column -> Numeric value to forecast
+    # ---------------------------------------------------------
+    df_prophet = df[['Date', 'Weekly_Sales']].rename(
+        columns={'Date': 'ds', 'Weekly_Sales': 'y'}
+    )
+
+    # Convert date column to datetime (supports DD-MM-YYYY)
+    df_prophet['ds'] = pd.to_datetime(df_prophet['ds'], dayfirst=True)
+
+    # ---------------------------------------------------------
+    # STEP 3: Show a Line Chart of the Time Series
+    # ---------------------------------------------------------
+    st.subheader("📊 Time Series Data")
+    st.line_chart(df_prophet.set_index('ds')['y'])
+
+    # ---------------------------------------------------------
+    # STEP 4: Train Prophet Model
+    # ---------------------------------------------------------
+    model = Prophet()
+    model.fit(df_prophet)
+
+    # ---------------------------------------------------------
+    # STEP 5: Create Future Dates & Generate Forecast
+    # ---------------------------------------------------------
+    future = model.make_future_dataframe(periods=periods_input, freq=freq)
+    forecast = model.predict(future)
+
+    st.subheader("🔮 Forecasted Values (Last Few Rows)")
+    st.write(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+
+    # ---------------------------------------------------------
+    # STEP 6: Plot the Forecast using Plotly
+    # ---------------------------------------------------------
+    st.subheader("📈 Forecast Plot")
+    fig1 = plot_plotly(model, forecast)
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # STEP 7: Show Trend & Seasonality Components
+    # ---------------------------------------------------------
+    st.subheader("📊 Forecast Components (Trend + Seasonal Patterns)")
+    fig2 = plot_components_plotly(model, forecast)
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # STEP 8: Model Evaluation using Cross-Validation
+    # ---------------------------------------------------------
+    st.subheader("📉 Model Performance (Cross-Validation)")
+
+    try:
+        # Cross-validation simulates forecasting into the future
+        df_cv = cross_validation(
+            model,
+            initial="365 days",   # first 1 year used for training
+            period="180 days",    # make predictions every 180 days
+            horizon="60 days"     # forecast 60 days into the future
+        )
+
+        # Calculate metrics like MAPE, RMSE, MAE
+        df_perf = performance_metrics(df_cv)
+        st.write(df_perf.head())
+
+        # Plot Mean Absolute Percentage Error (MAPE)
+        fig3 = px.line(
+            df_perf,
+            x='horizon',
+            y='mape',
+            title="MAPE Over Forecast Horizon"
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+    except Exception as e:
+        # Prophet cross-validation may fail on small datasets
+        st.warning(f"Cross-validation skipped due to error: {e}")
+
+    # ---------------------------------------------------------
+    # STEP 9: Allow User to Download the Forecast Results
+    # ---------------------------------------------------------
+    st.subheader("📥 Download Forecast Results")
+
+    csv = forecast.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download Forecast as CSV",
+        data=csv,
+        file_name="forecast_results.csv",
+        mime="text/csv"
+    )
+
+# -------------------------------------------------------------
+# If No File Uploaded Yet
+# -------------------------------------------------------------
+else:
+    st.info("Please upload a CSV file with `Date` and `Weekly_Sales` columns to continue.")
+
+
+# --------------------------------------------------------------
+# 📌 SALES FORECASTING WITH FACEBOOK PROPHET (Python Script)
+# --------------------------------------------------------------
+# This script:
+# 1️⃣ Loads Walmart sales time-series data  
+# 2️⃣ Prepares it in Prophet format  
+# 3️⃣ Trains a forecasting model  
+# 4️⃣ Predicts future sales  
+# 5️⃣ Plots forecast + components  
+# 6️⃣ Performs cross-validation  
+# 7️⃣ Computes accuracy metrics like MAPE, RMSE  
+# --------------------------------------------------------------
+
+import pandas as pd
+from prophet import Prophet
+import matplotlib.pyplot as plt
+from prophet.diagnostics import cross_validation, performance_metrics
+
+# --------------------------------------------------------------
+# STEP 1: Load Dataset
+# --------------------------------------------------------------
+# The dataset must contain:
+#   - "Date" column → dates of sales
+#   - "Weekly_Sales" column → numeric sales values
+df = pd.read_csv("Walmart_Sales.csv")
+
+# --------------------------------------------------------------
+# STEP 2: Prepare Data for Prophet
+# --------------------------------------------------------------
+# Prophet requires:
+#   ds → date column
+#   y  → value to forecast
+df_prophet = df[['Date', 'Weekly_Sales']].rename(
+    columns={'Date': 'ds', 'Weekly_Sales': 'y'}
+)
+
+# Convert date format (supports "DD-MM-YYYY")
+df_prophet['ds'] = pd.to_datetime(df_prophet['ds'], dayfirst=True)
+
+# --------------------------------------------------------------
+# STEP 3: Create and Train the Prophet Model
+# --------------------------------------------------------------
+model = Prophet()
+model.fit(df_prophet)
+
+# --------------------------------------------------------------
+# STEP 4: Create Future Dates & Generate Forecast
+# --------------------------------------------------------------
+# periods=12 → predict 12 more time steps
+# freq='W' → weekly forecast
+future = model.make_future_dataframe(periods=12, freq='W')
+
+# Generate the forecast
+forecast = model.predict(future)
+
+# --------------------------------------------------------------
+# STEP 5: Plot the Forecast
+# --------------------------------------------------------------
+model.plot(forecast)
+plt.title("Sales Forecast")
+plt.show()
+
+# --------------------------------------------------------------
+# STEP 6: Plot Forecast Components
+# --------------------------------------------------------------
+# Shows:
+#   - Trend
+#   - Weekly seasonality
+#   - Yearly seasonality (if present)
+model.plot_components(forecast)
+plt.show()
+
+# --------------------------------------------------------------
+# STEP 7: Evaluate Model using Cross-Validation
+# --------------------------------------------------------------
+# initial="365 days" → first 1 year used to train
+# period="180 days" → run prediction every 180 days
+# horizon="60 days" → forecast 60 days ahead each time
+df_cv = cross_validation(
+    model,
+    initial="365 days",
+    period="180 days",
+    horizon="60 days"
+)
+
+# --------------------------------------------------------------
+# STEP 8: Calculate Performance Metrics
+# --------------------------------------------------------------
+# Metrics include:
+#   - MAPE
+#   - RMSE
+#   - MAE
+#   - Coverage
+df_perf = performance_metrics(df_cv)
+print("Model Performance Metrics:")
+print(df_perf.head())
+
+# --------------------------------------------------------------
+# STEP 9: Plot Cross-Validation Metric (MAPE)
+# --------------------------------------------------------------
+from prophet.plot import plot_cross_validation_metric
+
+plot_cross_validation_metric(df_cv, metric='mape')
+plt.title("MAPE Over Time")
+plt.show()
